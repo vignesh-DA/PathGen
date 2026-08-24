@@ -1,0 +1,190 @@
+/* ============================================================
+   Home page layout
+   ============================================================ */
+
+.home {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Navbar ── */
+.navbar {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-6);
+  background: rgba(10,14,26,0.9);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  z-index: 50;
+}
+
+.navbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.navbar__logo {
+  font-size: 1.4rem;
+  color: var(--accent-primary);
+  filter: drop-shadow(0 0 8px var(--accent-primary));
+  line-height: 1;
+}
+
+.navbar__name {
+  font-size: 1rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.02em;
+}
+
+.navbar__tagline {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border-left: 1px solid var(--border-subtle);
+  padding-left: var(--space-3);
+}
+
+.navbar__steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+
+.step--active { color: var(--accent-primary); }
+.step--done   { color: var(--accent-green); }
+
+.step__num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.step--done .step__num {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #000;
+}
+
+.step__label { font-weight: 600; }
+
+.navbar__docs {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border: 1px solid var(--border-subtle);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.navbar__docs:hover {
+  border-color: var(--border-medium);
+  color: var(--text-primary);
+}
+
+/* ── Main layout ── */
+.main-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  flex: 1;
+  overflow: hidden;
+}
+
+.right-panels {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--space-4);
+  overflow: hidden;
+}
+
+/* ── Panel ── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 0;
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  gap: var(--space-3);
+}
+
+.panel__header .section-header { margin-bottom: 0; }
+
+.panel__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.panel__body {
+  flex: 1;
+  overflow: hidden;
+  padding: var(--space-4);
+}
+
+.panel__body--editor { padding: 0; }
+.panel__body--cfg    { padding: var(--space-3); }
+.panel__body--tests  { padding: var(--space-3); }
+
+/* Function name input */
+.func-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  width: 130px;
+  transition: border-color var(--transition-fast);
+  outline: none;
+}
+
+.func-input:focus { border-color: var(--border-bright); }
+
+/* Info chip */
+.info-chip {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Error inside panel */
+.panel .error-box { margin: 0 var(--space-4) var(--space-4); flex-shrink: 0; }

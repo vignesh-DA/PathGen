@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+prompt.md
+
+.agents/
+.agents/*
+
+memory.md
+memory.md
