@@ -1,145 +1,170 @@
-# PathGen — Automated Test Case Generation System
+# 🛠️ PathGen — Automated Test Case Generation System
 
-> **Compiler-Design Capstone Project** — Derives test cases deterministically from real C program structure using pycparser (AST) + networkx (CFG) + Z3 symbolic solving. AI (Groq/LangChain) is used *only* for plain-English explanations, never for deciding what the test cases are.
+![Python](https://img.shields.io/badge/Python-3.9+-blue.svg?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688.svg?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18+-61DAFB.svg?logo=react&logoColor=black)
+![Z3](https://img.shields.io/badge/Z3_Solver-Theorem_Proving-critical.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-## Features
+> **Compiler-Design Capstone Project** — Deterministically derives test cases from real C program structure using `pycparser` (AST) + `networkx` (CFG) + `Z3` symbolic solving. AI (Groq/LangChain) is used *exclusively* for plain-English explanations, ensuring test case derivation remains strictly mathematical and sound.
 
-- 🔍 **Real C Parsing** — pycparser AST with fake-libc stub (no gcc needed)
-- ⬡ **Interactive CFG** — networkx + react-flow with colour-coded edges
-- ⚡ **Z3 Symbolic Solving** — TRUE / FALSE / boundary values per condition
-- ✓ **TC01/TC02/TC03** — canonical age ≥ 18 example produces exact expected output
-- 🤖 **Bounded AI** — Groq explanations as post-processing only
-- 📊 **Export** — JSON & CSV download
-- 🗄️ **History** — SQLite-persisted run history
+---
 
-## Tech Stack
+## ✨ Key Features
 
-| Layer | Technology |
+- 🔍 **Real C Parsing**: Leverages `pycparser` AST with a fake-libc stub—no GCC required.
+- ⬡ **Interactive Control Flow Graphs (CFG)**: Uses `networkx` + `react-flow` for beautiful, interactive, color-coded graphs.
+- ⚡ **Z3 Symbolic Solving**: Computes `TRUE`, `FALSE`, and critical boundary values mathematically for every condition.
+- ✓ **Deterministic Accuracy**: Canonical test cases (e.g., `age >= 18`) produce exact, expected mathematical boundaries.
+- 🤖 **Bounded AI Explanations**: Uses Groq LLMs purely as a post-processing step to generate human-readable explanations of execution paths.
+- 📊 **Robust Exporting**: Download your generated test suites instantly in JSON or CSV format.
+- 🗄️ **Persistent Run History**: Uses SQLite-persisted session data to keep track of previous analyses.
+
+---
+
+## 🏗️ Architecture & Tech Stack
+
+| Component | Technology |
 |---|---|
-| Parsing | `pycparser` |
-| CFG | `networkx` |
-| Symbolic solving | `z3-solver` |
-| Backend | `FastAPI` + `Pydantic v2` |
-| AI | `LangChain` + `Groq` (`llama-3.3-70b-versatile`) |
-| Frontend | `React` + `Vite` |
-| Code editor | `Monaco Editor` |
-| CFG visualisation | `react-flow` |
-| Storage | `SQLite` + `SQLAlchemy` |
-| Testing | `pytest` |
+| **Syntax Parsing** | `pycparser` |
+| **Graph Modeling (CFG)** | `networkx` |
+| **Constraint & Symbolic Solving** | `z3-solver` |
+| **Backend Framework** | `FastAPI` + `Pydantic v2` |
+| **LLM / AI Layer** | `LangChain` + `Groq` (`llama-3.3-70b-versatile`) |
+| **Frontend Framework** | `React` + `Vite` |
+| **Code Editor** | `Monaco Editor` |
+| **Graph Visualization** | `react-flow` |
+| **Database & Storage** | `SQLite` + `SQLAlchemy` |
+| **Testing Suite** | `pytest` |
 
-## Quick Start
+---
 
-### 1. Backend
+## 🚀 Quick Start Guide
+
+### 1. Backend Setup
+
+First, navigate to the backend directory and set up the environment:
 
 ```bash
 cd backend
 
-# Install dependencies (system Python or venv)
+# Install all required Python dependencies
 pip install -r requirements.txt
 
-# Copy and configure environment
+# Configure your environment variables
 cp .env.example .env
-# Edit .env → set GROQ_API_KEY=gsk_...
+```
+*Note: Ensure you edit `.env` and set `GROQ_API_KEY=gsk_...` with your actual Groq API key.*
 
-# Run development server
+Start the development server:
+```bash
 uvicorn app.main:app --reload --port 8000
 ```
+📚 **API Documentation**: Open [http://localhost:8000/docs](http://localhost:8000/docs) for the interactive Swagger UI.
 
-Open Swagger UI: http://localhost:8000/docs
+### 2. Frontend Setup
 
-### 2. Frontend
+In a new terminal, launch the React interface:
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+🌐 **Web App**: Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-Open: http://localhost:5173
+### 3. Running the Test Suite
 
-### 3. Run Tests
+Validate the system core using the provided tests:
 
 ```bash
 cd backend
 python -m pytest tests/ -v
 ```
 
-## Usage
+---
 
-1. Paste C source code into the Monaco editor (or use the default `age >= 18` example)
-2. Enter the function name to analyse (default: `classify_age`)
-3. Click **▶ Analyze** → CFG appears with colour-coded edges:
-   - 🟢 Green = TRUE branch
-   - 🔴 Red = FALSE branch
-   - 🟡 Gold = back-edge (loop)
-   - 🔵 Blue = sequential
-4. Click **⚡ Generate Tests** → test case table appears
-5. Click any row → explanation panel slides in with:
-   - AI-generated plain-English explanation
-   - Path decisions (TRUE/FALSE per condition)
-   - Execution path steps
-6. Click **↓ JSON** or **↓ CSV** to export
+## 💡 How to Use PathGen
 
-## Folder Structure
+1. **Input Code**: Paste your C source code into the embedded Monaco editor (or use the provided `age >= 18` default template).
+2. **Target Function**: Specify the name of the function you wish to analyze (default: `classify_age`).
+3. **Generate CFG**: Click **▶ Analyze**. The CFG will dynamically render with color-coded execution edges:
+   - 🟢 **Green** = TRUE branch
+   - 🔴 **Red** = FALSE branch
+   - 🟡 **Gold** = Back-edge (Loop)
+   - 🔵 **Blue** = Sequential execution
+4. **Solve Paths**: Click **⚡ Generate Tests** to populate the test case table based on symbolic execution.
+5. **Insights**: Click on any generated test case row to slide in the explanation panel featuring:
+   - A plain-English AI-generated explanation.
+   - The path decisions made (`TRUE`/`FALSE` per condition).
+   - Step-by-step execution path tracking.
+6. **Export**: Export your complete test suite to JSON or CSV via the **↓ JSON** or **↓ CSV** buttons.
 
-```
+---
+
+## 📂 Project Structure
+
+```text
 pathgen/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                  # FastAPI entrypoint
-│   │   ├── config.py                # pydantic-settings
-│   │   ├── api/                     # Route handlers
-│   │   ├── core/                    # Compiler analysis modules
+│   │   ├── config.py                # Pydantic settings configuration
+│   │   ├── api/                     # REST Route handlers
+│   │   ├── core/                    # Core compiler analysis modules
 │   │   │   ├── ast_parser.py        # pycparser wrapper
-│   │   │   ├── cfg_builder.py       # networkx CFG
+│   │   │   ├── cfg_builder.py       # networkx CFG construction
 │   │   │   ├── condition_extractor.py
-│   │   │   ├── symbolic_solver.py   # z3-solver
+│   │   │   ├── symbolic_solver.py   # Z3 Theorem Prover integration
 │   │   │   ├── path_enumerator.py   # DFS path enumeration
 │   │   │   └── test_case_builder.py
-│   │   ├── ai/                      # LangChain + Groq (bounded)
-│   │   ├── models/                  # Pydantic + SQLAlchemy models
-│   │   └── db/                      # SQLite session
+│   │   ├── ai/                      # Bounded LangChain + Groq integration
+│   │   ├── models/                  # Pydantic + SQLAlchemy data models
+│   │   └── db/                      # SQLite database sessions
 │   ├── tests/
-│   │   └── sample_programs/         # C programs for validation
-│   ├── memory.md                    # Architecture decisions log
+│   │   └── sample_programs/         # Benchmark C programs for validation
 │   └── requirements.txt
 └── frontend/
     ├── src/
-    │   ├── components/              # CodeEditor, CFGViewer, TestCaseTable, ExplanationPanel
+    │   ├── components/              # UI Components (Monaco, react-flow, etc.)
     │   ├── pages/Home.jsx
     │   └── api/client.js
     └── vite.config.js
 ```
 
-## Environment Variables
+---
 
-| Variable | Description | Default |
+## ⚙️ Environment Configuration
+
+| Variable | Description | Default Value |
 |---|---|---|
-| `GROQ_API_KEY` | Groq API key (console.groq.com) | *required* |
-| `GROQ_MODEL` | Groq model name | `llama-3.3-70b-versatile` |
-| `DATABASE_URL` | SQLite path | `sqlite:///./pathgen.db` |
-| `MAX_PATHS` | Max CFG paths to enumerate | `50` |
-| `MAX_LOOP_ITERATIONS` | Max loop unrolling depth | `3` |
+| `GROQ_API_KEY` | Your Groq API key from console.groq.com | *(Required)* |
+| `GROQ_MODEL` | LLM model for explanations | `llama-3.3-70b-versatile` |
+| `DATABASE_URL` | SQLite connection string | `sqlite:///./pathgen.db` |
+| `MAX_PATHS` | Cap for CFG path enumeration | `50` |
+| `MAX_LOOP_ITERATIONS` | Maximum loop unrolling depth | `3` |
 
-## Canonical End-to-End Test
+---
 
-For the `age >= 18` example, the system must produce:
+## 🧪 Canonical End-to-End Validation
 
-| ID | Input | Branch | Expected Output | Boundary? |
-|---|---|---|---|---|
-| TC01 | age = 20 | TRUE | Adult | No |
-| TC02 | age = 17 | FALSE | Minor | No |
-| TC03 | age = 18 | TRUE | Adult | **Yes** |
+For the standard `age >= 18` control flow, PathGen's Z3 solver guarantees the following exact outputs:
 
-Run `pytest tests/test_symbolic_solver.py -v` to validate this automatically.
+| ID | Input | Branch | Expected Output | Boundary Value? |
+|---|---|---|---|:---:|
+| **TC01** | `age = 20` | `TRUE` | Adult | No |
+| **TC02** | `age = 17` | `FALSE` | Minor | No |
+| **TC03** | `age = 18` | `TRUE` | Adult | **Yes** |
 
-## API Endpoints
+*(Validate this automatically by running `pytest tests/test_symbolic_solver.py -v`)*
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/analyze` | Parse C code → CFG JSON + conditions |
-| POST | `/api/generate-tests` | Full pipeline → test cases + solver metadata |
-| GET | `/api/history` | Paginated list of past runs |
-| GET | `/api/history/{id}` | Full detail for one run |
+---
 
-Full docs at `/docs` (Swagger UI) when the backend is running.
+## 🔌 Core API Endpoints
+
+| Method | Endpoint | Description |
+|:---:|---|---|
+| **POST** | `/api/analyze` | Parses C code and returns the CFG JSON + conditions. |
+| **POST** | `/api/generate-tests` | Runs the full pipeline returning test cases + solver metadata. |
+| **GET** | `/api/history` | Fetches a paginated list of past analysis runs. |
+| **GET** | `/api/history/{id}` | Fetches full details for a specific historical run. |

@@ -14,4 +14,15 @@ prompt.md
 .agents/*
 
 memory.md
-memory.md
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+venv/
+env/
+
+.env
+.env.example
