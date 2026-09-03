@@ -12,7 +12,8 @@
 
 ## ✨ Key Features
 
-- 🔍 **Real C Parsing**: Leverages `pycparser` AST with a fake-libc stub—no GCC required.
+- 🌐 **Multi-Language Support**: Analyze C, Python, JavaScript, and TypeScript source code with language-specific parsers.
+- 🔍 **Real AST Parsing**: Leverages `pycparser` (C), Python `ast` module, and regex-based parsers (JS/TS) with no external compiler required.
 - ⬡ **Interactive Control Flow Graphs (CFG)**: Uses `networkx` + `react-flow` for beautiful, interactive, color-coded graphs.
 - ⚡ **Z3 Symbolic Solving**: Computes `TRUE`, `FALSE`, and critical boundary values mathematically for every condition.
 - ✓ **Deterministic Accuracy**: Canonical test cases (e.g., `age >= 18`) produce exact, expected mathematical boundaries.
@@ -26,7 +27,7 @@
 
 | Component | Technology |
 |---|---|
-| **Syntax Parsing** | `pycparser` |
+| **Syntax Parsing** | `pycparser` (C), `ast` (Python), regex (JS/TS) |
 | **Graph Modeling (CFG)** | `networkx` |
 | **Constraint & Symbolic Solving** | `z3-solver` |
 | **Backend Framework** | `FastAPI` + `Pydantic v2` |
@@ -86,19 +87,20 @@ python -m pytest tests/ -v
 
 ## 💡 How to Use PathGen
 
-1. **Input Code**: Paste your C source code into the embedded Monaco editor (or use the provided `age >= 18` default template).
-2. **Target Function**: Specify the name of the function you wish to analyze (default: `classify_age`).
-3. **Generate CFG**: Click **▶ Analyze**. The CFG will dynamically render with color-coded execution edges:
+1. **Select Language**: Choose your source language (C, Python, JavaScript, or TypeScript) from the dropdown.
+2. **Input Code**: Paste your source code into the embedded Monaco editor (or use the provided default templates).
+3. **Target Function**: Specify the name of the function you wish to analyze (default: `classify_age`).
+4. **Generate CFG**: Click **▶ Analyze**. The CFG will dynamically render with color-coded execution edges:
    - 🟢 **Green** = TRUE branch
    - 🔴 **Red** = FALSE branch
    - 🟡 **Gold** = Back-edge (Loop)
    - 🔵 **Blue** = Sequential execution
-4. **Solve Paths**: Click **⚡ Generate Tests** to populate the test case table based on symbolic execution.
-5. **Insights**: Click on any generated test case row to slide in the explanation panel featuring:
+5. **Solve Paths**: Click **⚡ Generate Tests** to populate the test case table based on symbolic execution.
+6. **Insights**: Click on any generated test case row to slide in the explanation panel featuring:
    - A plain-English AI-generated explanation.
    - The path decisions made (`TRUE`/`FALSE` per condition).
    - Step-by-step execution path tracking.
-6. **Export**: Export your complete test suite to JSON or CSV via the **↓ JSON** or **↓ CSV** buttons.
+7. **Export**: Export your complete test suite to JSON or CSV via the **↓ JSON** or **↓ CSV** buttons.
 
 ---
 
@@ -112,7 +114,10 @@ pathgen/
 │   │   ├── config.py                # Pydantic settings configuration
 │   │   ├── api/                     # REST Route handlers
 │   │   ├── core/                    # Core compiler analysis modules
-│   │   │   ├── ast_parser.py        # pycparser wrapper
+│   │   │   ├── ast_parser.py        # C parser (pycparser wrapper)
+│   │   │   ├── python_parser.py     # Python parser (ast module)
+│   │   │   ├── javascript_parser.py # JS/TS parser (regex-based)
+│   │   │   ├── language_dispatcher.py # Multi-language router
 │   │   │   ├── cfg_builder.py       # networkx CFG construction
 │   │   │   ├── condition_extractor.py
 │   │   │   ├── symbolic_solver.py   # Z3 Theorem Prover integration
@@ -122,15 +127,27 @@ pathgen/
 │   │   ├── models/                  # Pydantic + SQLAlchemy data models
 │   │   └── db/                      # SQLite database sessions
 │   ├── tests/
-│   │   └── sample_programs/         # Benchmark C programs for validation
+│   │   ├── sample_programs/         # Benchmark programs for validation
+│   │   └── test_multilang_parser.py # Multi-language parser tests
 │   └── requirements.txt
 └── frontend/
     ├── src/
     │   ├── components/              # UI Components (Monaco, react-flow, etc.)
-    │   ├── pages/Home.jsx
-    │   └── api/client.js
+    │   ├── pages/Home.jsx           # Main page with language selector
+    │   └── api/client.js            # API client with language support
     └── vite.config.js
 ```
+
+---
+
+## 🌐 Supported Languages
+
+| Language | Parser | Status | Supported Constructs |
+|---|---|---|---|
+| **C** | `pycparser` | ✅ Full | if/else, while, for, do-while, switch/case |
+| **Python** | `ast` module | ✅ Full | if/elif/else, for, while, try/except, with |
+| **JavaScript** | Regex-based | ✅ Full | if/else, for, while, do-while, switch/case |
+| **TypeScript** | Regex-based | ✅ Full | if/else, for, while, do-while, switch/case |
 
 ---
 

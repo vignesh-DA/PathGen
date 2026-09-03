@@ -46,168 +46,449 @@ class TestCase:
     path_steps: list[str]                     # node labels along the path
 
 
+
 # ---------------------------------------------------------------------------
-# Output simulation
+# Expression resolver — the core engine for output simulation
 # ---------------------------------------------------------------------------
 
-# Matches: printf("some string\n") or printf("%s\n", "some string")
-_PRINTF_LITERAL = re.compile(
-    r'printf\s*\(\s*"([^"\\]*(\\.[^"\\]*)*)"\s*\)',  # printf("literal")
-)
-_PRINTF_STRING_FMT = re.compile(
-    r'printf\s*\(\s*"%s[^"]*"\s*,\s*"([^"]*)"\s*\)',  # printf("%s", "str")
-)
-_PRINTF_INT_FMT = re.compile(
-    r'printf\s*\(\s*"%d[^"]*"\s*,\s*(\w+)\s*\)',      # printf("%d", var)
-)
-# C: return 1; / return "literal";  (semicolon required)
-_RETURN_C = re.compile(r'return\s+(\d+(?:\.\d+)?|"[^"]*"|\w+)\s*;')
-# JS/Python: return "literal" or return 1 (semicolon optional)
-_RETURN_JS_PY = re.compile(r"return\s+(\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*'|[\w]+)\s*;?$")
-# Python: print("literal") / console.log("literal")
-_PRINT_FN = re.compile(r'(?:print|console\.log)\s*\(\s*(["\'])(.*?)\1\s*\)')
+def _safe_eval(expr: str, env: dict) -> tuple[bool, object]:
+    """Evaluate expr with env bindings. Returns (success, value)."""
+    try:
+        result = eval(expr, {"__builtins__": {}}, dict(env))  # noqa: S307
+        return True, result
+    except Exception:
+        return False, None
 
+
+def _resolve_expr(expr: str, input_values: dict) -> str:
+    """
+    Resolve any single expression to a display string.
+
+    Handles:
+      • Variable names            → looked up in input_values
+      • String literals           → "hello" / 'hi'
+      • f-strings                 → f"age is {age}"
+      • JS template literals      → `n = ${n}`
+      • Numeric literals          → 42, 3.14
+      • Arithmetic / comparisons  → a + b, x >= 18
+      • Ternary (JS)              → x > 0 ? "pos" : "neg"
+      • Boolean                   → true/false → True/False
+      • Any safe Python eval-able expression
+    """
+    expr = expr.strip().rstrip(";")
+    if not expr:
+        return ""
+
+    # ── Direct variable ──────────────────────────────────────────────────────
+    if expr in input_values:
+        return str(input_values[expr])
+
+    # ── Python f-string: f"..." or f'...' ────────────────────────────────────
+    if len(expr) > 2 and expr[0] == 'f' and expr[1] in ('"', "'"):
+        quote = expr[1]
+        if expr.endswith(quote):
+            template = expr[2:-1]
+        else:
+            template = expr[2:]
+        return re.sub(r'\{([^}]+)\}',
+                      lambda m: _resolve_expr(m.group(1), input_values),
+                      template)
+
+    # ── JS template literal: `text ${expr} text` ─────────────────────────────
+    if expr.startswith('`') and expr.endswith('`'):
+        template = expr[1:-1]
+        return re.sub(r'\$\{([^}]+)\}',
+                      lambda m: _resolve_expr(m.group(1), input_values),
+                      template)
+
+    # ── String literals ───────────────────────────────────────────────────────
+    for q in ('"', "'"):
+        if expr.startswith(q) and expr.endswith(q) and len(expr) >= 2:
+            return expr[1:-1]
+
+    # ── Numeric literals ──────────────────────────────────────────────────────
+    try:
+        return str(int(expr))
+    except ValueError:
+        pass
+    try:
+        return str(float(expr))
+    except ValueError:
+        pass
+
+    # ── JS ternary: cond ? a : b  →  Python: a if cond else b ────────────────
+    ternary = re.match(r'^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$', expr, re.DOTALL)
+    if ternary:
+        cond_s, if_s, else_s = ternary.group(1, 2, 3)
+        # Normalise JS booleans / null / undefined
+        js_norm = {"true": "True", "false": "False", "null": "None",
+                   "undefined": "None", "===": "==", "!==": "!="}
+        cond_py = cond_s
+        for js, py in js_norm.items():
+            cond_py = re.sub(rf'\b{js}\b', py, cond_py)
+        ok, result = _safe_eval(cond_py, input_values)
+        if ok:
+            chosen = if_s if result else else_s
+            return _resolve_expr(chosen.strip(), input_values)
+
+    # ── Try eval with input values directly ──────────────────────────────────
+    # Normalise JS keywords to Python so eval works
+    normalised = expr
+    for js_kw, py_kw in [("true", "True"), ("false", "False"),
+                          ("null", "None"), ("undefined", "None"),
+                          ("===", "=="), ("!==", "!=")]:
+        normalised = re.sub(rf'\b{js_kw}\b', py_kw, normalised)
+
+    ok, val = _safe_eval(normalised, input_values)
+    if ok and val is not None:
+        return str(val)
+
+    # ── Substitute variable names, then try eval ─────────────────────────────
+    substituted = normalised
+    for var, v in sorted(input_values.items(), key=lambda x: -len(x[0])):
+        substituted = re.sub(rf'\b{re.escape(str(var))}\b', repr(v), substituted)
+    ok, val = _safe_eval(substituted, {})
+    if ok and val is not None:
+        return str(val)
+
+    return f"<{expr}>"
+
+
+def _split_args(args_str: str) -> list[str]:
+    """Split call arguments by comma, respecting nested parens / string literals."""
+    args: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_str = False
+    str_char = ''
+    i = 0
+    while i < len(args_str):
+        c = args_str[i]
+        if in_str:
+            current.append(c)
+            if c == '\\' and i + 1 < len(args_str):
+                i += 1
+                current.append(args_str[i])
+            elif c == str_char:
+                in_str = False
+        elif c in ('"', "'", '`'):
+            in_str, str_char = True, c
+            current.append(c)
+        elif c in ('(', '[', '{'):
+            depth += 1
+            current.append(c)
+        elif c in (')', ']', '}'):
+            depth -= 1
+            current.append(c)
+        elif c == ',' and depth == 0:
+            args.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(c)
+        i += 1
+    if current:
+        args.append(''.join(current).strip())
+    return [a for a in args if a]
+
+
+def _extract_fn_args(stmt: str, fn_names: list[str]) -> list[str] | None:
+    """
+    Find the first matching function call and return its argument strings,
+    using balanced-parenthesis matching (so nested calls work correctly).
+    """
+    for fn in fn_names:
+        # Escape dots (console.log) then search
+        pattern = rf'(?<!\w){re.escape(fn)}\s*\('
+        m = re.search(pattern, stmt)
+        if not m:
+            continue
+        start = m.end() - 1   # index of '('
+        depth = 0
+        for i in range(start, len(stmt)):
+            if stmt[i] == '(':
+                depth += 1
+            elif stmt[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    return _split_args(stmt[start + 1: i])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Output simulation — public function
+# ---------------------------------------------------------------------------
 
 def _simulate_output(path_steps_nodes: list[dict],
                      input_values: dict[str, int | float | str]) -> str:
     """
-    Walk the node list and extract any printf/print/console.log/return outputs.
-    Substitutes known variable values where possible.
-    Handles C (printf, return x;), Python (print(), return x), and JS
-    (console.log(), return x / return 'string').
+    Walk the CFG path nodes and extract any output/return statements.
+
+    Covers virtually all common patterns across C, Python, and JavaScript/TypeScript:
+      C       – printf(fmt, ...), return expr;
+      Python  – print(*args), print(f"..."), return expr
+      JS/TS   – console.log(...), return expr, template literals, ternary
+    Uses a safe eval engine to resolve variables, arithmetic, f-strings,
+    template literals, and JS ternaries automatically.
     """
     outputs: list[str] = []
 
     for node in path_steps_nodes:
         for stmt in node.get("statements", []):
-            # printf("literal\n")  — C
-            m = _PRINTF_LITERAL.search(stmt)
+            s = stmt.strip()
+
+            # ── C printf ─────────────────────────────────────────────────────
+
+            # printf("literal\n")  — no format specifiers at all
+            m = re.search(r'printf\s*\(\s*"([^"\\%]*(\\.[^"\\%]*)*)"\s*\)', s)
             if m:
                 raw = m.group(1).replace("\\n", "").replace("\\t", "\t")
                 outputs.append(raw)
                 continue
 
-            # printf("%s\n", "literal")  — C
-            m = _PRINTF_STRING_FMT.search(stmt)
+            # printf("%s...", "literal")
+            m = re.search(r'printf\s*\(\s*"%s[^"]*"\s*,\s*"([^"]*)"\s*\)', s)
             if m:
                 outputs.append(m.group(1))
                 continue
 
-            # printf("%d\n", var)  — C
-            m = _PRINTF_INT_FMT.search(stmt)
+            # printf("...%d...", var_or_expr)  — any numeric format specifier
+            m = re.search(r'printf\s*\(\s*"[^"]*%[diouxXeEfgG][^"]*"\s*,\s*(.+?)\s*\)\s*;?$', s)
             if m:
-                var_name = m.group(1)
-                if var_name in input_values:
-                    outputs.append(str(input_values[var_name]))
-                else:
-                    outputs.append(f"<{var_name}>")
+                outputs.append(_resolve_expr(m.group(1), input_values))
                 continue
 
-            # print("...") / console.log("...")  — Python / JS
-            m = _PRINT_FN.search(stmt)
+            # printf("...%s...", var_or_expr)
+            m = re.search(r'printf\s*\(\s*"[^"]*%s[^"]*"\s*,\s*(.+?)\s*\)\s*;?$', s)
             if m:
-                outputs.append(m.group(2))
+                outputs.append(_resolve_expr(m.group(1), input_values))
                 continue
 
-            # return statement — try C pattern first (requires ;), then JS/Python
-            m = _RETURN_C.search(stmt) or _RETURN_JS_PY.search(stmt)
+            # ── print() / console.log() ──────────────────────────────────────
+            args = _extract_fn_args(s, ["print", "console.log"])
+            if args is not None:
+                parts = [_resolve_expr(a, input_values) for a in args]
+                result = " ".join(p for p in parts if p)
+                if result:
+                    outputs.append(result)
+                continue
+
+            # ── return <expr> ────────────────────────────────────────────────
+            m = re.match(r'\breturn\b\s+(.+)', s)
             if m:
-                val = m.group(1).strip('"\'')
-                if val in input_values:
-                    val = str(input_values[val])
-                outputs.append(f"return {val}")
+                ret_expr = m.group(1).strip().rstrip(';').strip()
+                if ret_expr:
+                    val = _resolve_expr(ret_expr, input_values)
+                    outputs.append(f"return {val}")
 
     return "; ".join(outputs) if outputs else "<no output>"
 
 
-
 # ---------------------------------------------------------------------------
-# Input value picker
+# Path-level Z3 solver  (the real fix — solves the whole path at once)
 # ---------------------------------------------------------------------------
 
-def _pick_input_values(
-    path: CFGPath,
-    solver_results: dict[str, SolverResult],
-    conditions: list[ConditionInfo],
-) -> tuple[dict[str, int | float | str], bool, str]:
-    """
-    Given a path's condition sequence, pick concrete input values.
+import z3 as _z3
 
-    For each condition along the path:
-    - If branch_taken == "true"  → use solver true_values
-    - If branch_taken == "false" → use solver false_values
-    - Check if this is a boundary case
+from app.core.symbolic_solver import (
+    _build_constraint,      # build z3 constraint from a condition string
+    _make_typed_var,        # create correctly-typed z3 variable
+    _model_to_values,       # extract concrete values from a z3 model
+    _normalize_expr,        # JS/TS operator normalisation
+    _derive_boundary,       # boundary value derivation
+    _extract_simple_parts,  # split "lhs op rhs"
+    _try_as_int,
+    _try_as_float,
+    _canon_type,
+)
 
-    Returns: (input_values, boundary_flag, derivation_method)
+
+def _collect_var_types(
+    conditions_taken: list[dict],
+    solver_results: dict[str, "SolverResult"],
+) -> dict[str, str]:
+    """Aggregate inferred variable types from all SolverResults on this path."""
+    var_types: dict[str, str] = {}
+    solver_by_expr = {sr.expr_str: sr for sr in solver_results.values()}
+    for cd in conditions_taken:
+        expr = cd.get("condition_expr", "")
+        sr = solver_by_expr.get(expr)
+        if sr:
+            # SolverResult doesn't store inferred_types directly, but we can
+            # reconstruct from the condition objects via the caller.
+            pass
+    return var_types
+
+
+def _unwrap_expr(raw_expr: str) -> str:
     """
-    # Build a lookup: condition_expr → SolverResult
-    # We match by expr substring since path conditions store the condition expr
-    solver_by_expr: dict[str, SolverResult] = {
-        sr.expr_str: sr for sr in solver_results.values()
+    Strip the !(…) wrapper the CFG builder adds to false-branch edges.
+    '!(amount <= 0)'  →  'amount <= 0'
+    'amount <= 0'     →  'amount <= 0'   (unchanged)
+    """
+    s = raw_expr.strip()
+    if s.startswith("!(") and s.endswith(")"):
+        return s[2:-1]
+    if s.startswith("!") and not s.startswith("!("):
+        return s[1:]
+    return s
+
+
+def _solve_path(
+    conditions_taken: list[dict],
+    solver_results: dict[str, "SolverResult"],
+    conditions: list["ConditionInfo"],
+) -> tuple[dict[str, int | float | str], bool, bool, str, dict]:
+    """
+    Solve the FULL path constraint system with Z3.
+
+    For each condition decision on the path:
+      - branch_taken == "true"  → add the condition as-is
+      - branch_taken == "false" → add its negation  (stripping !(…) wrapper first)
+
+    All constraints are solved jointly in one z3.Solver call, guaranteeing
+    the returned values actually reach this path (no more conflicting merges).
+
+    Returns: (input_values, is_boundary, has_boundary_variant, derivation, boundary_inputs)
+    """
+    # Build lookup maps — keyed by BARE expression (no !(...) wrapper)
+    solver_by_expr: dict[str, SolverResult] = {sr.expr_str: sr for sr in solver_results.values()}
+    cond_by_expr:   dict[str, ConditionInfo] = {c.expr_str: c for c in conditions}
+
+    # ── Step 1: collect ALL variable types from ALL conditions in the program ──
+    # This ensures unconstrained variables (not in this path) still get a
+    # default value of 0 instead of appearing as '?' in the output.
+    var_types: dict[str, str] = {}
+    for ci in conditions:                              # ← ALL conditions, not just path
+        var_types.update(ci.inferred_types or {})
+
+    # Pre-build z3 vars for every known variable (all get a default)
+    z3_vars: dict[str, _z3.ExprRef] = {
+        v: _make_typed_var(v, var_types.get(v))
+        for v in var_types
     }
-    # Also index by condition_id
-    solver_by_id: dict[str, SolverResult] = solver_results
 
-    combined_inputs: dict[str, int | float | str] = {}
-    is_boundary = False
+    # ── Step 2: assemble joint constraints ────────────────────────────────────
+    joint_constraints: list[_z3.BoolRef] = []
     all_derived = True
+    boundary_exprs: list[tuple[str, str, int | float]] = []   # (var, op, rhs_num)
 
-    for cond_decision in path.conditions_taken:
-        cond_expr = cond_decision.get("condition_expr", "")
-        branch = cond_decision.get("branch_taken", "true")
+    for cd in conditions_taken:
+        raw_expr = cd.get("condition_expr", "")
+        branch   = cd.get("branch_taken", "true")
 
-        # Strip negation prefix if any
-        clean_expr = cond_expr.lstrip("!(").rstrip(")")
+        if not raw_expr:
+            continue
 
-        sr = solver_by_expr.get(cond_expr) or solver_by_expr.get(clean_expr)
+        # Strip !(…) wrapper — the polarity is conveyed by branch, not by !
+        bare_expr = _unwrap_expr(raw_expr)
+        ci        = cond_by_expr.get(bare_expr)
 
-        if sr is None:
+        # Ensure any variables that appear only in this condition are in z3_vars
+        if ci:
+            for v in ci.variables:
+                if v not in z3_vars:
+                    z3_vars[v]    = _make_typed_var(v, (ci.inferred_types or {}).get(v))
+                    var_types[v]  = _canon_type((ci.inferred_types or {}).get(v))
+
+        local_types = (ci.inferred_types or {}) if ci else {}
+        all_types   = {**var_types, **local_types}
+
+        normalised = _normalize_expr(bare_expr)
+        c = _build_constraint(normalised, all_types)
+        if c is None:
             all_derived = False
             continue
 
-        if not sr.is_satisfiable:
-            all_derived = False
-            continue
+        # Negate for false branches
+        if branch == "false":
+            c = _z3.Not(c)
 
+        joint_constraints.append(c)
+
+        # Track simple true-branch conditions for boundary derivation
         if branch == "true":
-            vals = sr.true_values
-            # Check if this is the boundary value
-            for vname, vval in vals.items():
-                bval = sr.boundary_values.get(vname)
-                if bval is not None and bval == vval:
-                    is_boundary = True
-        elif branch == "false":
-            vals = sr.false_values
-        else:
-            vals = sr.true_values
+            parts = _extract_simple_parts(normalised)
+            if parts and parts[0] in z3_vars and parts[2] not in z3_vars:
+                num = _try_as_int(parts[2])
+                if num is None:
+                    num = _try_as_float(parts[2])
+                if num is not None:
+                    boundary_exprs.append((parts[0], parts[1], num))
 
-        # Merge values (later conditions override earlier ones for same variable — last wins)
-        combined_inputs.update(vals)
+    # ── Step 3: solve the joint system ───────────────────────────────────────
+    if not joint_constraints:
+        return _pick_input_values_legacy(conditions_taken, solver_results, conditions)
 
-    # If path uses boundary values (indicated by boundary solver results),
-    # check if the boundary path is this path
-    # For the canonical TC03 (boundary): prefer boundary values for conditions
-    # that have boundary_flag=True and the branch taken is "true"
-    # We do a second pass to override with boundary values where applicable
-    for cond_decision in path.conditions_taken:
-        cond_expr = cond_decision.get("condition_expr", "")
-        branch = cond_decision.get("branch_taken", "true")
-        clean_expr = cond_expr.lstrip("!(").rstrip(")")
-        sr = solver_by_expr.get(cond_expr) or solver_by_expr.get(clean_expr)
+    solver = _z3.Solver()
+    solver.add(*joint_constraints)
 
-        if sr and sr.boundary_flag and branch == "true":
-            bvals = sr.boundary_values
-            # Check if using boundary values changes anything
-            if bvals and bvals != sr.true_values:
-                # This is a boundary-specific path variant
-                # We'll return boundary values for this case
-                # Only override if not already overridden
-                for vname, bval in bvals.items():
-                    if combined_inputs.get(vname) != bval:
-                        is_boundary = True
+    if solver.check() != _z3.sat:
+        all_derived = False
+        return _pick_input_values_legacy(conditions_taken, solver_results, conditions)
+
+    model = solver.model()
+    input_values = _model_to_values(model, z3_vars, var_types)
+
+    # ── Step 4: fill in any unconstrained variables with sane defaults ────────
+    # Z3 leaves unconstrained vars out of the model; give them a safe default (0).
+    for v in z3_vars:
+        if v not in input_values:
+            input_values[v] = 0
+    # ── Step 5: boundary variant ──────────────────────────────────────────────
+    # For each simple true-branch condition with a numeric RHS, try pinning the
+    # variable to its boundary value while keeping the rest of the constraints.
+    is_boundary = False
+    boundary_inputs: dict[str, int | float | str] = {}
+
+    if boundary_exprs and all_derived:
+        for var, op, rhs_num in reversed(boundary_exprs):
+            bv   = _derive_boundary(var, op, rhs_num, var_types.get(var, "int"))
+            bval = bv.get(var)
+            if bval is None or bval == input_values.get(var):
+                continue
+            s2 = _z3.Solver()
+            s2.add(*joint_constraints)
+            s2.add(z3_vars[var] == (
+                _z3.IntVal(int(bval)) if isinstance(bval, int) else _z3.RealVal(float(bval))
+            ))
+            if s2.check() == _z3.sat:
+                boundary_inputs = _model_to_values(s2.model(), z3_vars, var_types)
+                # Fill unconstrained vars
+                for v in z3_vars:
+                    if v not in boundary_inputs:
+                        boundary_inputs[v] = input_values.get(v, 0)
+                is_boundary = True
+            break   # one boundary variant per path
 
     derivation = "DERIVED (verified)" if all_derived else "AI-SUGGESTED (unverified)"
-    return combined_inputs, is_boundary, derivation
+    return input_values, is_boundary, bool(boundary_inputs), derivation, boundary_inputs
+
+
+def _pick_input_values_legacy(
+    conditions_taken: list[dict],
+    solver_results: dict[str, "SolverResult"],
+    conditions: list["ConditionInfo"],
+) -> tuple[dict[str, int | float | str], bool, bool, str, dict]:
+    """
+    Legacy per-condition value merging (fallback when Z3 path solve fails).
+    Less accurate for multi-variable else-if chains but used as safety net.
+    """
+    solver_by_expr: dict[str, SolverResult] = {sr.expr_str: sr for sr in solver_results.values()}
+    combined: dict[str, int | float | str] = {}
+    all_derived = True
+
+    for cd in conditions_taken:
+        expr   = cd.get("condition_expr", "")
+        branch = cd.get("branch_taken", "true")
+        clean  = expr.lstrip("!(").rstrip(")")
+        sr     = solver_by_expr.get(expr) or solver_by_expr.get(clean)
+        if not sr or not sr.is_satisfiable:
+            all_derived = False
+            continue
+        combined.update(sr.true_values if branch != "false" else sr.false_values)
+
+    derivation = "DERIVED (verified)" if all_derived else "AI-SUGGESTED (unverified)"
+    return combined, False, False, derivation, {}
 
 
 # ---------------------------------------------------------------------------
@@ -221,18 +502,16 @@ def build_test_cases(
     conditions: list[ConditionInfo],
 ) -> list[TestCase]:
     """
-    Build one TestCase per unique path × input-set combination.
+    Build one TestCase per unique path, with an optional boundary variant.
 
-    For paths with boundary conditions, we emit TWO test cases:
-    - One with the non-boundary (regular) true_values
-    - One with the boundary values
-    This gives TC01 (regular TRUE), TC02 (FALSE), TC03 (boundary) for the
-    canonical age >= 18 example.
+    Uses path-level Z3 solving: all conditions along the path are solved
+    jointly so the returned input values are guaranteed to actually reach
+    that path (fixes the else-if chain constraint propagation bug).
+
+    For paths with a boundary value, two test cases are emitted:
+      1. Regular values that traverse the path
+      2. Boundary values (e.g. age == 18 for age >= 18)
     """
-    solver_by_expr: dict[str, SolverResult] = {}
-    for sr in solver_results.values():
-        solver_by_expr[sr.expr_str] = sr
-
     test_cases: list[TestCase] = []
     tc_counter = 0
 
@@ -240,39 +519,21 @@ def build_test_cases(
     node_data_map = {nid: data for nid, data in cfg.graph.nodes(data=True)}
 
     for path in paths:
-        variants: list[tuple[dict, bool, str]] = []
+        # ── Joint Z3 solve for this path ──────────────────────────────────────
+        result = _solve_path(path.conditions_taken, solver_results, conditions)
+        input_values, _is_bnd, has_boundary, derivation, boundary_inputs = result
 
-        # Normal input values
-        inputs, is_bnd, derivation = _pick_input_values(path, solver_results, conditions)
-        variants.append((inputs, False, derivation))
-
-        # Boundary variant — check if any condition on this path has boundary values
-        # different from its true values
-        boundary_inputs: dict[str, int | float | str] = dict(inputs)
-        has_boundary_variant = False
-
-        for cond_decision in path.conditions_taken:
-            cond_expr = cond_decision.get("condition_expr", "")
-            branch = cond_decision.get("branch_taken", "true")
-            clean_expr = cond_expr.lstrip("!(").rstrip(")")
-            sr = solver_by_expr.get(cond_expr) or solver_by_expr.get(clean_expr)
-
-            if sr and sr.boundary_flag and branch == "true" and sr.boundary_values:
-                # Check if boundary ≠ regular true values
-                for vname, bval in sr.boundary_values.items():
-                    if inputs.get(vname) != bval:
-                        boundary_inputs[vname] = bval
-                        has_boundary_variant = True
-
-        if has_boundary_variant:
+        variants: list[tuple[dict, bool, str]] = [
+            (input_values, False, derivation),
+        ]
+        if has_boundary and boundary_inputs:
             variants.append((boundary_inputs, True, derivation))
 
         for input_vals, boundary_flag, deriv in variants:
             tc_counter += 1
             tc_id = f"TC{tc_counter:02d}"
 
-            # Collect path node data for output simulation
-            path_nodes = [node_data_map.get(step.node_id, {}) for step in path.steps]
+            path_nodes  = [node_data_map.get(step.node_id, {}) for step in path.steps]
             expected_out = _simulate_output(path_nodes, input_vals)
 
             test_cases.append(TestCase(
@@ -283,7 +544,7 @@ def build_test_cases(
                 expected_output=expected_out,
                 boundary_flag=boundary_flag,
                 derivation_method=deriv,
-                explanation="",  # filled by AI layer
+                explanation="",   # filled by AI layer
                 path_steps=[step.node_label for step in path.steps],
             ))
 

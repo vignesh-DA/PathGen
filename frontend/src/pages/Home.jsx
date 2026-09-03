@@ -104,7 +104,8 @@ function downloadCSV(testCases, filename) {
 // Home
 // ---------------------------------------------------------------------------
 export default function Home() {
-  const [code, setCode]           = useState(DEFAULT_CODE)
+  const [language, setLanguage]     = useState('c')
+  const [code, setCode]           = useState(DEFAULT_CODE.c)
   const [funcName, setFuncName]   = useState('classify_age')
   const [cfgData, setCfgData]     = useState(null)
   const [testData, setTestData]   = useState(null)
@@ -119,6 +120,17 @@ export default function Home() {
   // Phase tracker
   const phase = cfgData ? (testData ? 3 : 2) : 1
 
+  // ---- Language Change ----
+  const handleLanguageChange = useCallback((newLang) => {
+    setLanguage(newLang)
+    setCode(DEFAULT_CODE[newLang] || DEFAULT_CODE.c)
+    setCfgData(null)
+    setTestData(null)
+    setSelectedTC(null)
+    setAnalyzeErr(null)
+    setGenerateErr(null)
+  }, [])
+
   // ---- Analyze ----
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true)
@@ -127,7 +139,7 @@ export default function Home() {
     setTestData(null)
     setSelectedTC(null)
     try {
-      const result = await analyzeCode(code, funcName)
+      const result = await analyzeCode(code, funcName, language)
       setCfgData(result)
     } catch (err) {
       const msg = err.response?.data?.detail?.message
@@ -137,14 +149,14 @@ export default function Home() {
     } finally {
       setAnalyzing(false)
     }
-  }, [code, funcName])
+  }, [code, funcName, language])
 
   // ---- Generate Tests ----
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
     setGenerateErr(null)
     try {
-      const result = await generateTests(code, funcName)
+      const result = await generateTests(code, funcName, language)
       setTestData(result)
     } catch (err) {
       const msg = err.response?.data?.detail?.message
@@ -154,7 +166,7 @@ export default function Home() {
     } finally {
       setGenerating(false)
     }
-  }, [code, funcName])
+  }, [code, funcName, language])
 
   // ---- Row click ----
   const handleRowClick = useCallback(tc => {
@@ -209,9 +221,21 @@ export default function Home() {
           <div className="panel__header">
             <div className="section-header">
               <div className="section-dot" />
-              <span className="section-title">C Source Code</span>
+              <span className="section-title">Source Code</span>
+              <span className="info-chip">{language.toUpperCase()}</span>
             </div>
             <div className="panel__controls">
+              <select
+                id="language-select"
+                className="lang-select"
+                value={language}
+                onChange={e => handleLanguageChange(e.target.value)}
+                title="Select programming language"
+              >
+                {LANGUAGE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
               <input
                 id="function-name-input"
                 className="func-input"
@@ -231,7 +255,7 @@ export default function Home() {
             </div>
           </div>
           <div className="panel__body panel__body--editor">
-            <CodeEditor value={code} onChange={setCode} />
+            <CodeEditor value={code} onChange={setCode} language={language} />
           </div>
           {analyzeErr && <div className="error-box">{analyzeErr}</div>}
         </section>

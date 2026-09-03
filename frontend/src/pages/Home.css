@@ -161,6 +161,24 @@
 .panel__body--cfg    { padding: var(--space-3); }
 .panel__body--tests  { padding: var(--space-3); }
 
+/* Language selector */
+.lang-select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  min-width: 100px;
+  transition: border-color var(--transition-fast);
+  outline: none;
+  cursor: pointer;
+}
+
+.lang-select:focus { border-color: var(--border-bright); }
+.lang-select:hover { border-color: var(--border-medium); }
+
 /* Function name input */
 .func-input {
   background: var(--bg-surface);

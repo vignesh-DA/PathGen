@@ -24,12 +24,21 @@ int main() {
 }
 `
 
-export default function CodeEditor({ value, onChange, readOnly = false }) {
+const MONACO_LANGUAGE_MAP = {
+  c: 'c',
+  python: 'python',
+  javascript: 'javascript',
+  typescript: 'typescript',
+}
+
+export default function CodeEditor({ value, onChange, readOnly = false, language = 'c' }) {
+  const monacoLanguage = MONACO_LANGUAGE_MAP[language] || 'c'
+
   return (
     <div className="code-editor">
       <Editor
         height="100%"
-        defaultLanguage="c"
+        language={monacoLanguage}
         value={value ?? DEFAULT_CODE}
         onChange={readOnly ? undefined : onChange}
         theme="vs-dark"
