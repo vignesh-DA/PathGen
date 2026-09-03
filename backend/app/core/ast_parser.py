@@ -58,12 +58,13 @@ class ConditionInfo:
 
 @dataclass
 class ParseResult:
-    """Result of parsing a C source string."""
+    """Result of parsing a source string (language-agnostic structure)."""
     ast: c_ast.FileAST
     conditions: list[ConditionInfo]
     source_code: str
     parse_errors: list[str] = field(default_factory=list)
     unsupported_constructs: list[str] = field(default_factory=list)
+    language: str = "c"  # "c" | "python" | "javascript" | "typescript"
 
 
 # ---------------------------------------------------------------------------

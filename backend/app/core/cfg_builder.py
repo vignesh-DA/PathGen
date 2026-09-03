@@ -31,6 +31,7 @@ Design decisions (see memory.md):
 
 from __future__ import annotations
 
+import ast as py_ast
 import itertools
 from dataclasses import dataclass, field
 from typing import Any
@@ -39,6 +40,9 @@ import networkx as nx
 from pycparser import c_ast, c_generator
 
 from app.core.ast_parser import ParseResult, _expr_to_str, _get_line
+
+# alias used by the language dispatch in build_cfg
+ast = py_ast
 
 _generator = c_generator.CGenerator()
 _id_counter = itertools.count()
@@ -461,14 +465,22 @@ def build_cfg(parse_result: ParseResult, function_name: str = "main") -> CFGGrap
     Build a CFG from a ParseResult.
 
     Args:
-        parse_result: Output of ast_parser.parse_c_source()
-        function_name: Which C function to build the CFG for (default: "main")
+        parse_result: Output of ast_parser.parse_c_source() / language_dispatcher
+        function_name: Which function to build the CFG for (default: "main")
 
     Returns:
         CFGGraph with populated networkx DiGraph.
     """
     global _id_counter
     _id_counter = itertools.count()  # reset counter per CFG build
+
+    if parse_result.language == "python" and parse_result.ast is not None:
+        from app.core.python_cfg_builder import build_cfg_python
+        return build_cfg_python(parse_result.ast, function_name=function_name)
+
+    if parse_result.language in ("javascript", "typescript"):
+        from app.core.javascript_cfg_builder import build_cfg_javascript
+        return build_cfg_javascript(parse_result.source_code, function_name=function_name)
 
     if parse_result.ast is None:
         # Return an empty CFG if parsing failed

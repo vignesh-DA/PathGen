@@ -3,7 +3,7 @@ Database session and initialisation.
 """
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from app.config import settings
@@ -17,8 +17,17 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():
-    """Create all tables."""
+    """Create all tables and perform lightweight migrations if needed."""
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("PRAGMA table_info(analysis_runs)"))
+            cols = [row[1] for row in result.fetchall()]
+            if cols and "language" not in cols:
+                conn.execute(text("ALTER TABLE analysis_runs ADD COLUMN language VARCHAR(32) DEFAULT 'c'"))
+                conn.commit()
+        except Exception:
+            pass
 
 
 def get_db():

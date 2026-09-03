@@ -60,33 +60,40 @@ _PRINTF_STRING_FMT = re.compile(
 _PRINTF_INT_FMT = re.compile(
     r'printf\s*\(\s*"%d[^"]*"\s*,\s*(\w+)\s*\)',      # printf("%d", var)
 )
-_RETURN_LITERAL = re.compile(r'return\s+(\d+|"[^"]*"|\w+)\s*;')
+# C: return 1; / return "literal";  (semicolon required)
+_RETURN_C = re.compile(r'return\s+(\d+(?:\.\d+)?|"[^"]*"|\w+)\s*;')
+# JS/Python: return "literal" or return 1 (semicolon optional)
+_RETURN_JS_PY = re.compile(r"return\s+(\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*'|[\w]+)\s*;?$")
+# Python: print("literal") / console.log("literal")
+_PRINT_FN = re.compile(r'(?:print|console\.log)\s*\(\s*(["\'])(.*?)\1\s*\)')
 
 
 def _simulate_output(path_steps_nodes: list[dict],
                      input_values: dict[str, int | float | str]) -> str:
     """
-    Walk the node list and extract any printf/return outputs.
+    Walk the node list and extract any printf/print/console.log/return outputs.
     Substitutes known variable values where possible.
+    Handles C (printf, return x;), Python (print(), return x), and JS
+    (console.log(), return x / return 'string').
     """
     outputs: list[str] = []
 
     for node in path_steps_nodes:
         for stmt in node.get("statements", []):
-            # printf("literal\n")
+            # printf("literal\n")  — C
             m = _PRINTF_LITERAL.search(stmt)
             if m:
                 raw = m.group(1).replace("\\n", "").replace("\\t", "\t")
                 outputs.append(raw)
                 continue
 
-            # printf("%s\n", "literal")
+            # printf("%s\n", "literal")  — C
             m = _PRINTF_STRING_FMT.search(stmt)
             if m:
                 outputs.append(m.group(1))
                 continue
 
-            # printf("%d\n", var)
+            # printf("%d\n", var)  — C
             m = _PRINTF_INT_FMT.search(stmt)
             if m:
                 var_name = m.group(1)
@@ -96,15 +103,22 @@ def _simulate_output(path_steps_nodes: list[dict],
                     outputs.append(f"<{var_name}>")
                 continue
 
-            # return statement with a literal
-            m = _RETURN_LITERAL.search(stmt)
+            # print("...") / console.log("...")  — Python / JS
+            m = _PRINT_FN.search(stmt)
             if m:
-                val = m.group(1).strip('"')
+                outputs.append(m.group(2))
+                continue
+
+            # return statement — try C pattern first (requires ;), then JS/Python
+            m = _RETURN_C.search(stmt) or _RETURN_JS_PY.search(stmt)
+            if m:
+                val = m.group(1).strip('"\'')
                 if val in input_values:
                     val = str(input_values[val])
                 outputs.append(f"return {val}")
 
     return "; ".join(outputs) if outputs else "<no output>"
+
 
 
 # ---------------------------------------------------------------------------

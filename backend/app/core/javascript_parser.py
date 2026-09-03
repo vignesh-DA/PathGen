@@ -109,9 +109,14 @@ class _ConditionExtractor:
 
     def extract(self) -> list[ConditionInfo]:
         """Run extraction and return all conditions."""
-        for match in _JSTokenizer.IF_PATTERN.finditer(self.source):
+        # else-if first, so plain `if` matches inside `else if` can be skipped
+        else_if_matches = list(_JSTokenizer.ELSE_IF_PATTERN.finditer(self.source))
+        else_if_spans = [m.span() for m in else_if_matches]
+        for match in else_if_matches:
             self._add_condition(match.group(1), "If", self._line_number(match.start()))
-        for match in _JSTokenizer.ELSE_IF_PATTERN.finditer(self.source):
+        for match in _JSTokenizer.IF_PATTERN.finditer(self.source):
+            if any(s <= match.start() < e for s, e in else_if_spans):
+                continue  # already captured by ELSE_IF_PATTERN
             self._add_condition(match.group(1), "If", self._line_number(match.start()))
         for match in _JSTokenizer.WHILE_PATTERN.finditer(self.source):
             self._add_condition(match.group(1), "While", self._line_number(match.start()))
@@ -155,6 +160,7 @@ def parse_javascript_source(source_code: str) -> ParseResult:
         source_code=source_code,
         parse_errors=parse_errors,
         unsupported_constructs=[],
+        language="javascript",
     )
 
 

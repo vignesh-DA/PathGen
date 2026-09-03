@@ -136,12 +136,19 @@ class _ConditionExtractor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_For(self, node: ast.For) -> None:
-        expr_str = f"for loop iteration"
+        try:
+            target = ast.unparse(node.target)
+        except Exception:
+            target = "i"
+        try:
+            iterable = ast.unparse(node.iter)
+        except Exception:
+            iterable = "<iterable>"
         self._conditions.append(ConditionInfo(
             condition_id=self._next_id(),
-            expr_str=expr_str,
-            variables=[],
-            inferred_types={},
+            expr_str=f"{target} in {iterable}",
+            variables=[target],
+            inferred_types={target: "int"},
             source_line=getattr(node, "lineno", None),
             source_col=getattr(node, "col_offset", None),
             ast_node_type="For",
@@ -249,4 +256,5 @@ def parse_python_source(source_code: str) -> ParseResult:
         source_code=source_code,
         parse_errors=parse_errors,
         unsupported_constructs=extractor.unsupported,
+        language="python",
     )
