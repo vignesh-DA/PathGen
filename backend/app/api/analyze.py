@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from app.core.ast_parser import parse_c_source
+from app.core.language_dispatcher import parse_source
 from app.core.cfg_builder import build_cfg, cfg_to_json
 from app.core.condition_extractor import extract_conditions
 from app.models.schemas import AnalyzeRequest, AnalyzeResponse
@@ -29,14 +29,14 @@ async def analyze(request: AnalyzeRequest):
     if not request.source_code.strip():
         raise HTTPException(status_code=400, detail="source_code must not be empty")
 
-    # Module 1a: Parse
-    parse_result = parse_c_source(request.source_code)
+    # Module 1a: Parse (language-aware)
+    parse_result = parse_source(request.source_code, request.language)
 
     if parse_result.parse_errors and parse_result.ast is None:
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "C source code could not be parsed",
+                "message": f"{request.language.title()} source code could not be parsed",
                 "errors": parse_result.parse_errors,
             },
         )

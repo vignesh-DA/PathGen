@@ -6,7 +6,8 @@ import ExplanationPanel from '../components/ExplanationPanel'
 import { analyzeCode, generateTests } from '../api/client'
 import './Home.css'
 
-const DEFAULT_CODE = `#include <stdio.h>
+const DEFAULT_CODE = {
+  c: `#include <stdio.h>
 
 int classify_age(int age) {
     if (age >= 18) {
@@ -24,7 +25,52 @@ int main() {
     classify_age(age);
     return 0;
 }
-`
+`,
+  python: `def classify_age(age):
+    if age >= 18:
+        print("Adult")
+        return 1
+    else:
+        print("Minor")
+        return 0
+
+age = int(input("Enter age: "))
+classify_age(age)
+`,
+  javascript: `function classifyAge(age) {
+    if (age >= 18) {
+        console.log("Adult");
+        return 1;
+    } else {
+        console.log("Minor");
+        return 0;
+    }
+}
+
+const age = parseInt(prompt("Enter age: "));
+classifyAge(age);
+`,
+  typescript: `function classifyAge(age: number): number {
+    if (age >= 18) {
+        console.log("Adult");
+        return 1;
+    } else {
+        console.log("Minor");
+        return 0;
+    }
+}
+
+const age: number = parseInt(prompt("Enter age: ") || "0");
+classifyAge(age);
+`,
+}
+
+const LANGUAGE_OPTIONS = [
+  { value: 'c', label: 'C' },
+  { value: 'python', label: 'Python' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'typescript', label: 'TypeScript' },
+]
 
 // ---------------------------------------------------------------------------
 // Export helpers

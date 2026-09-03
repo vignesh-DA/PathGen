@@ -26,3 +26,8 @@ env/
 
 .env
 .env.example
+
+.agents
+
+
+PRODUCT_ENHANCEMENT_PLAN.md

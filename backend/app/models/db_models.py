@@ -18,6 +18,7 @@ class AnalysisRun(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     function_name = Column(String(128), default="main")
+    language = Column(String(32), default="c")
     source_code = Column(Text, nullable=False)
     cfg_json = Column(Text, nullable=False)       # JSON string
     test_cases_json = Column(Text, nullable=False)  # JSON string

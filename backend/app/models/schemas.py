@@ -12,8 +12,9 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 class AnalyzeRequest(BaseModel):
-    source_code: str = Field(..., description="Raw C source code string")
+    source_code: str = Field(..., description="Raw source code string")
     function_name: str = Field("main", description="Which function to analyse (default: main)")
+    language: str = Field("c", description="Source language: 'c', 'python', 'javascript', 'typescript'")
 
 
 class ConditionInfoSchema(BaseModel):
@@ -61,8 +62,9 @@ class AnalyzeResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class GenerateTestsRequest(BaseModel):
-    source_code: str = Field(..., description="Original C source code")
+    source_code: str = Field(..., description="Original source code")
     function_name: str = Field("main")
+    language: str = Field("c", description="Source language: 'c', 'python', 'javascript', 'typescript'")
     max_paths: int | None = Field(None, description="Override max paths (default from config)")
     max_loop_iterations: int | None = Field(None)
 
@@ -113,6 +115,7 @@ class HistoryItem(BaseModel):
     id: int
     created_at: str
     function_name: str
+    language: str = "c"
     source_code_preview: str   # first 200 chars
     node_count: int
     edge_count: int

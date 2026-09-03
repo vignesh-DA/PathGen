@@ -10,18 +10,20 @@ const api = axios.create({
   timeout: 60000,
 })
 
-export async function analyzeCode(sourceCode, functionName = 'main') {
+export async function analyzeCode(sourceCode, functionName = 'main', language = 'c') {
   const { data } = await api.post('/analyze', {
     source_code: sourceCode,
     function_name: functionName,
+    language: language,
   })
   return data
 }
 
-export async function generateTests(sourceCode, functionName = 'main', options = {}) {
+export async function generateTests(sourceCode, functionName = 'main', language = 'c', options = {}) {
   const { data } = await api.post('/generate-tests', {
     source_code: sourceCode,
     function_name: functionName,
+    language: language,
     max_paths: options.maxPaths ?? null,
     max_loop_iterations: options.maxLoopIters ?? null,
   })

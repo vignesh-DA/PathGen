@@ -38,6 +38,7 @@ async def list_history(
             id=r.id,
             created_at=r.created_at.isoformat(),
             function_name=r.function_name or "main",
+            language=r.language or "c",
             source_code_preview=r.source_code[:200],
             node_count=r.node_count,
             edge_count=r.edge_count,

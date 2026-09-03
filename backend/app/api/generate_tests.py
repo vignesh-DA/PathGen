@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.ai.explain_chain import explain_all
-from app.core.ast_parser import parse_c_source
+from app.core.language_dispatcher import parse_source
 from app.core.cfg_builder import build_cfg, cfg_to_json
 from app.core.condition_extractor import extract_conditions
 from app.core.path_enumerator import enumerate_paths
@@ -48,12 +48,12 @@ async def generate_tests(
     if not request.source_code.strip():
         raise HTTPException(status_code=400, detail="source_code must not be empty")
 
-    # Step 1 & 2: Parse + CFG
-    parse_result = parse_c_source(request.source_code)
+    # Step 1 & 2: Parse + CFG (language-aware)
+    parse_result = parse_source(request.source_code, request.language)
     if parse_result.parse_errors and parse_result.ast is None:
         raise HTTPException(
             status_code=422,
-            detail={"message": "Parse error", "errors": parse_result.parse_errors},
+            detail={"message": f"Parse error in {request.language}", "errors": parse_result.parse_errors},
         )
 
     cfg = build_cfg(parse_result, function_name=request.function_name)
@@ -94,6 +94,7 @@ async def generate_tests(
     ]
     run = AnalysisRun(
         function_name=request.function_name,
+        language=request.language,
         source_code=request.source_code,
         cfg_json=json.dumps(cfg_dict),
         test_cases_json=json.dumps(tc_dicts),
